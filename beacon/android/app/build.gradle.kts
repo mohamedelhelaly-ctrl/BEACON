@@ -7,7 +7,13 @@ plugins {
 
 android {
     namespace = "com.example.beacon"
-    compileSdk = flutter.compileSdkVersion
+    // If the `flutter` extension isn't available during Gradle evaluation, fall back to a reasonable default.
+    // This prevents `project ':app' does not specify compileSdk` errors when the kotlin-dsl metadata isn't read.
+    compileSdk = try {
+        flutter.compileSdkVersion
+    } catch (e: Exception) {
+        33
+    }
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
