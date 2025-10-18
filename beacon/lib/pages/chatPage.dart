@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 class ChatPage extends StatelessWidget {
   const ChatPage({Key? key}) : super(key: key);
 
-  // Same color palette as landing page
   static const Color _bgColor = Color(0xFF0F1724);
   static const Color _accentRed = Color(0xFFEF4444);
   static const Color _accentOrange = Color(0xFFFF8A4B);
@@ -16,7 +15,7 @@ class ChatPage extends StatelessWidget {
         shape: BoxShape.circle,
         gradient: LinearGradient(
           colors: isMine 
-            ? [_accentOrange, _accentRed]
+            ? [_accentRed]
             : [Color(0xFF263244), Color(0xFF0F1724)],
         ),
         border: Border.all(color: Colors.white24, width: 1),
@@ -51,13 +50,14 @@ class ChatPage extends StatelessWidget {
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: isMine 
-                    ? [_accentRed, _accentOrange]
-                    : [Color(0xFF263244), Color(0xFF1A2332)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
+                  color: isMine ? _accentRed : null,
+                  gradient: isMine
+                      ? null
+                      : LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF263244), Color(0xFF0F1724)],
+                        ),
                 borderRadius: BorderRadius.circular(18),
                 border: isEmergency 
                   ? Border.all(color: _accentRed, width: 2)
@@ -138,7 +138,10 @@ class ChatPage extends StatelessWidget {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () {},
+          onPressed: () {
+            Navigator.of(context).maybePop();
+          },
+          tooltip: 'Back',
         ),
         title: Row(
           children: [
@@ -191,7 +194,6 @@ class ChatPage extends StatelessWidget {
       ),
       body: Column(
         children: [
-          // Messages list
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(vertical: 16),
@@ -221,7 +223,6 @@ class ChatPage extends StatelessWidget {
             ),
           ),
 
-          // Quick messages row
           Container(
             height: 60,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -264,7 +265,6 @@ class ChatPage extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
 
-                // Text input
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -285,7 +285,6 @@ class ChatPage extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
 
-                // Send button
                 Container(
                   width: 48,
                   height: 48,
@@ -304,12 +303,6 @@ class ChatPage extends StatelessWidget {
             ),
           ),
         ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {},
-        backgroundColor: _accentRed,
-        child: const Icon(Icons.emergency, color: Colors.white),
-        tooltip: 'Emergency message',
       ),
     );
   }

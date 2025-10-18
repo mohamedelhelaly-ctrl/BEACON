@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'chatPage.dart';
 
 class NetworkDashboardUI extends StatelessWidget {
 	const NetworkDashboardUI({Key? key}) : super(key: key);
@@ -68,7 +69,6 @@ class NetworkDashboardUI extends StatelessWidget {
 													padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
 													child: Row(
 														children: [
-															// Device avatar / icon
 															Container(
 																width: 56,
 																height: 56,
@@ -80,7 +80,6 @@ class NetworkDashboardUI extends StatelessWidget {
 															),
 															const SizedBox(width: 12),
 
-															// Name and status
 															Expanded(
 																child: Column(
 																	crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,12 +106,13 @@ class NetworkDashboardUI extends StatelessWidget {
 																),
 															),
 
-															// Message and SOS buttons
 															Row(
 																mainAxisSize: MainAxisSize.min,
 																children: [
-																	ElevatedButton(
-																		onPressed: () {},
+																																		ElevatedButton(
+																																					onPressed: () {
+																																						Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChatPage()));
+																																					},
 																		style: ElevatedButton.styleFrom(
 																			backgroundColor: Colors.white12,
 																			elevation: 0,
@@ -143,7 +143,6 @@ class NetworkDashboardUI extends StatelessWidget {
 								),
 							),
 
-							// Footer
 							Padding(
 								padding: const EdgeInsets.symmetric(vertical: 8),
 								child: Center(

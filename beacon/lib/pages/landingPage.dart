@@ -4,8 +4,7 @@ import 'networkDashboard.dart';
 class LandingPageUI extends StatelessWidget {
 	const LandingPageUI({Key? key}) : super(key: key);
 
-	// Accessible color palette: dark background with urgent accents
-	static const Color _bgColor = Color(0xFF0F1724); // charcoal / dark navy
+	static const Color _bgColor = Color(0xFF0F1724);
 	static const Color _accentRed = Color(0xFFEF4444);
 	static const Color _accentOrange = Color(0xFFFF8A4B);
 
@@ -23,12 +22,10 @@ class LandingPageUI extends StatelessWidget {
 					child: Column(
 						crossAxisAlignment: CrossAxisAlignment.center,
 						children: [
-							// Top Section
 							_buildTopSection(context, isLarge),
 
 							const SizedBox(height: 24),
 
-							// Middle Section - main actions
 							Expanded(
 								child: Center(
 									child: ConstrainedBox(
@@ -62,7 +59,6 @@ class LandingPageUI extends StatelessWidget {
 								),
 							),
 
-							// Footer
 							Padding(
 								padding: const EdgeInsets.only(bottom: 6),
 								child: Text(
@@ -90,7 +86,6 @@ class LandingPageUI extends StatelessWidget {
 	Widget _buildTopSection(BuildContext context, bool isLarge) {
 		return Column(
 			children: [
-				// Placeholder logo circle
 				Container(
 					width: isLarge ? 110 : 88,
 					height: isLarge ? 110 : 88,
@@ -166,7 +161,6 @@ class LandingPageUI extends StatelessWidget {
 					elevation: 6,
 					backgroundColor: Colors.transparent,
 				).copyWith(
-					// Add gradient background via MaterialStateProperty
 					backgroundColor: MaterialStateProperty.resolveWith((states) => null),
 				),
 			),
