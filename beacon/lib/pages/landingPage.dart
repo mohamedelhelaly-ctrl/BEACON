@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'networkDashboard.dart';
 
 class LandingPageUI extends StatelessWidget {
 	const LandingPageUI({Key? key}) : super(key: key);
@@ -35,13 +36,18 @@ class LandingPageUI extends StatelessWidget {
 										child: Column(
 											mainAxisSize: MainAxisSize.min,
 											children: [
-												_actionButton(
-													context,
-													label: 'Join Existing Communication',
-													icon: Icons.link,
-													colorA: _accentRed,
-													colorB: _accentOrange,
-												),
+																		_actionButton(
+																			context,
+																			label: 'Join Existing Communication',
+																			icon: Icons.link,
+																			colorA: _accentRed,
+																			colorB: _accentOrange,
+																			onPressed: () {
+																				Navigator.of(context).push(MaterialPageRoute(
+																					builder: (_) => const NetworkDashboardUI(),
+																				));
+																			},
+																		),
 												const SizedBox(height: 18),
 												_actionButton(
 													context,
@@ -137,16 +143,17 @@ class LandingPageUI extends StatelessWidget {
 		);
 	}
 
-	Widget _actionButton(BuildContext context,
-			{required String label,
-			required IconData icon,
-			required Color colorA,
-			required Color colorB}) {
+		Widget _actionButton(BuildContext context,
+				{required String label,
+				required IconData icon,
+				required Color colorA,
+				required Color colorB,
+				VoidCallback? onPressed}) {
 		return SizedBox(
 			width: double.infinity,
 			height: 72,
 			child: ElevatedButton.icon(
-				onPressed: () {},
+					onPressed: onPressed ?? () {},
 				icon: Icon(icon, size: 28, color: Colors.white),
 				label: Text(
 					label,
