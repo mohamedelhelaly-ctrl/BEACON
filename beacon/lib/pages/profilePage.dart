@@ -7,7 +7,7 @@ class ProfilePage extends StatelessWidget {
   static const Color _bgColor = Color(0xFF0F1724);
   static const Color _accentRed = Color(0xFFEF4444);
   static const Color _accentOrange = Color(0xFFFF8A4B);
-
+  
   Widget _buildProfileField({
     required String label,
     required String value,
