@@ -26,4 +26,9 @@ class P2PService {
   Future<List<DiscoveredPeers>> fetchPeers() async {
     return await _wifiP2P.fetchPeers();
   }
+
+  // NEW: host the network
+  Future<void> createGroup() async {
+    await _wifiP2P.createGroup();
+  }
 }
