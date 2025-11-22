@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'networkDashboard.dart';
 import 'profilePage.dart';
-import '../services/p2p_service.dart';   // <-- IMPORTANT
+import '../services/p2p_service.dart';
 
 class LandingPageUI extends StatelessWidget {
   const LandingPageUI({Key? key}) : super(key: key);
@@ -12,7 +12,7 @@ class LandingPageUI extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p2p = P2PService();   // <-- Create instance
+    final p2p = P2PService();
 
     final width = MediaQuery.of(context).size.width;
     final isLarge = width > 600;
@@ -32,11 +32,11 @@ class LandingPageUI extends StatelessWidget {
               Expanded(
                 child: Center(
                   child: ConstrainedBox(
-                    constraints: BoxConstraints(maxWidth: isLarge ? 520 : 420),
+                    constraints:
+                        BoxConstraints(maxWidth: isLarge ? 520 : 420),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-
                         // JOIN EXISTING COMMUNICATION
                         _actionButton(
                           context,
@@ -47,10 +47,11 @@ class LandingPageUI extends StatelessWidget {
                           onPressed: () async {
                             await p2p.initialize();
                             await p2p.discover();
-                            
+
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => const NetworkDashboardUI(),
+                                builder: (_) =>
+                                    const NetworkDashboardUI(isHost: false),
                               ),
                             );
                           },
@@ -67,11 +68,12 @@ class LandingPageUI extends StatelessWidget {
                           colorB: _accentRed,
                           onPressed: () async {
                             await p2p.initialize();
-                            await p2p.createGroup();   // host mode
+                            await p2p.createGroup();
 
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) => const NetworkDashboardUI(),
+                                builder: (_) =>
+                                    const NetworkDashboardUI(isHost: true),
                               ),
                             );
                           },
@@ -87,10 +89,10 @@ class LandingPageUI extends StatelessWidget {
                 child: Text(
                   'Powered by Peer-to-Peer Technology',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: Colors.white70, fontSize: 12),
                 ),
               ),
             ],
@@ -123,7 +125,8 @@ class LandingPageUI extends StatelessWidget {
                     end: Alignment.bottomRight,
                     colors: [Color(0xFF263244), Color(0xFF0F1724)],
                   ),
-                  border: Border.all(color: Colors.white12, width: 1.5),
+                  border:
+                      Border.all(color: Colors.white12, width: 1.5),
                 ),
                 child: Center(
                   child: Text(
@@ -167,7 +170,8 @@ class LandingPageUI extends StatelessWidget {
             icon: const Icon(Icons.person, color: Colors.white),
             onPressed: () {
               Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ProfilePage()),
+                MaterialPageRoute(
+                    builder: (_) => const ProfilePage()),
               );
             },
             tooltip: 'Profile',
@@ -177,12 +181,14 @@ class LandingPageUI extends StatelessWidget {
     );
   }
 
-  Widget _actionButton(BuildContext context,
-      {required String label,
-      required IconData icon,
-      required Color colorA,
-      required Color colorB,
-      VoidCallback? onPressed}) {
+  Widget _actionButton(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+    required Color colorA,
+    required Color colorB,
+    VoidCallback? onPressed,
+  }) {
     return SizedBox(
       width: double.infinity,
       height: 72,
@@ -191,16 +197,20 @@ class LandingPageUI extends StatelessWidget {
         icon: Icon(icon, size: 28, color: Colors.white),
         label: Text(
           label,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          style:
+              const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
         ),
         style: ElevatedButton.styleFrom(
           foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          padding:
+              const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20)),
           elevation: 6,
           backgroundColor: Colors.transparent,
         ).copyWith(
-          backgroundColor: MaterialStateProperty.resolveWith((states) => null),
+          backgroundColor:
+              MaterialStateProperty.resolveWith((states) => null),
         ),
       ),
     );
