@@ -1,75 +1,49 @@
-import 'package:flutter_p2p_connection/flutter_p2p_connection.dart';
+import 'dart:io';
+import 'package:permission_handler/permission_handler.dart';
 
 class PermissionService {
-  static final _p2pHost = FlutterP2pHost();
-  static final _p2pClient = FlutterP2pClient();
+  /// Request permissions required for Wi-Fi Direct
+  static Future<bool> requestP2PPermissions() async {
+    print('[PermissionService] Requesting permissions...');
 
-  /// Request all required permissions for P2P operations
-  static Future<bool> requestAllPermissions() async {
-    print('[PermissionService] Requesting all permissions...');
-
-    // 1) Request Storage permissions (for file transfer)
-    if (!await _p2pHost.checkStoragePermission()) {
-      print('[PermissionService] Requesting storage permission...');
-      await _p2pHost.askStoragePermission();
+    // Always required (Android 6+ uses location for WiFi scanning)
+    final location = await Permission.location.request();
+    print('[PermissionService] Location: $location');
+    if (!location.isGranted) {
+      print('[PermissionService] Location permission NOT granted.');
+      return false;
     }
 
-    // 2) Request P2P permissions (Wi-Fi Direct)
-    if (!await _p2pHost.checkP2pPermissions()) {
-      print('[PermissionService] Requesting P2P permissions...');
-      await _p2pHost.askP2pPermissions();
+    // Detect SDK
+    final sdk = _getAndroidSDK();
+    print('[PermissionService] SDK Detected: $sdk');
+
+    // Android 13+ (API 33) requires NEARBY_WIFI_DEVICES
+    if (sdk >= 40) {
+      print('[PermissionService] Requesting Nearby WiFi permission...');
+      final nearby = await Permission.nearbyWifiDevices.request();
+      print('[PermissionService] Nearby Result: $nearby');
+
+      if (!nearby.isGranted) {
+        print('[PermissionService] Nearby WiFi permission NOT granted.');
+        return false;
+      }
+    } else {
+      // Android 12 and below DO NOT need this permission
+      print('[PermissionService] Nearby permission SKIPPED for SDK < 33');
     }
 
-    // 3) Request Bluetooth permissions (for BLE discovery)
-    if (!await _p2pHost.checkBluetoothPermissions()) {
-      print('[PermissionService] Requesting Bluetooth permissions...');
-      await _p2pHost.askBluetoothPermissions();
-    }
-
-    print('[PermissionService] All permissions requested!');
+    print('[PermissionService] All required permissions granted!');
     return true;
   }
 
-  /// Enable required services (WiFi, Location, Bluetooth)
-  static Future<void> enableAllServices() async {
-    print('[PermissionService] Enabling services...');
-
-    // Enable WiFi
-    if (!await _p2pHost.checkWifiEnabled()) {
-      print('[PermissionService] Enabling WiFi...');
-      await _p2pHost.enableWifiServices();
-    }
-
-    // Enable Location (required for Wi-Fi scanning on many Android versions)
-    if (!await _p2pHost.checkLocationEnabled()) {
-      print('[PermissionService] Enabling location...');
-      await _p2pHost.enableLocationServices();
-    }
-
-    // Enable Bluetooth (for BLE discovery)
-    if (!await _p2pHost.checkBluetoothEnabled()) {
-      print('[PermissionService] Enabling Bluetooth...');
-      await _p2pHost.enableBluetoothServices();
-    }
-
-    print('[PermissionService] Services enabled!');
-  }
-
-  /// Request permissions and enable services before P2P operations
-  static Future<bool> prepareForP2P() async {
+  /// Safely detect Android SDK
+  static int _getAndroidSDK() {
     try {
-      await requestAllPermissions();
-      await enableAllServices();
-      return true;
-    } catch (e) {
-      print('[PermissionService] Error preparing for P2P: $e');
-      return false;
-    }
-  }
-
-  /// Dispose resources
-  static void dispose() {
-    _p2pHost.dispose();
-    _p2pClient.dispose();
+      final release = Platform.operatingSystemVersion;
+      final match = RegExp(r'Android (\d+)').firstMatch(release);
+      if (match != null) return int.parse(match.group(1)!);
+    } catch (_) {}
+    return 33; // fallback
   }
 }
