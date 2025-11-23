@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'networkDashboard.dart';
 import 'profilePage.dart';
-import '../services/p2p_service.dart';
+import '../services/permissions_service.dart';
 
 class LandingPageUI extends StatelessWidget {
   const LandingPageUI({Key? key}) : super(key: key);
@@ -12,8 +12,6 @@ class LandingPageUI extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p2p = P2PService();
-
     final width = MediaQuery.of(context).size.width;
     final isLarge = width > 600;
 
@@ -37,7 +35,7 @@ class LandingPageUI extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // JOIN EXISTING COMMUNICATION
+                        // JOIN EXISTING COMMUNICATION (CLIENT MODE)
                         _actionButton(
                           context,
                           label: 'Join Existing Communication',
@@ -45,21 +43,35 @@ class LandingPageUI extends StatelessWidget {
                           colorA: _accentRed,
                           colorB: _accentOrange,
                           onPressed: () async {
-                            await p2p.initialize();
-                            await p2p.discover();
+                            // Prepare permissions and services
+                            final prepared =
+                                await PermissionService.prepareForP2P();
+                            if (!prepared) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'Permissions or services are required'),
+                                  ),
+                                );
+                              }
+                              return;
+                            }
 
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    const NetworkDashboardUI(isHost: false),
-                              ),
-                            );
+                            if (context.mounted) {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const NetworkDashboardUI(isHost: false),
+                                ),
+                              );
+                            }
                           },
                         ),
 
                         const SizedBox(height: 18),
 
-                        // START NEW COMMUNICATION
+                        // START NEW COMMUNICATION (HOST MODE)
                         _actionButton(
                           context,
                           label: 'Start New Communication',
@@ -67,15 +79,29 @@ class LandingPageUI extends StatelessWidget {
                           colorA: _accentOrange,
                           colorB: _accentRed,
                           onPressed: () async {
-                            await p2p.initialize();
-                            await p2p.createGroup();
+                            // Prepare permissions and services
+                            final prepared =
+                                await PermissionService.prepareForP2P();
+                            if (!prepared) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text(
+                                        'Permissions or services are required'),
+                                  ),
+                                );
+                              }
+                              return;
+                            }
 
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    const NetworkDashboardUI(isHost: true),
-                              ),
-                            );
+                            if (context.mounted) {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      const NetworkDashboardUI(isHost: true),
+                                ),
+                              );
+                            }
                           },
                         ),
                       ],
