@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'networkDashboard.dart';
 import 'profilePage.dart';
-import '../services/p2p_service.dart';
+import '../services/permissions_service.dart';
 
 class LandingPageUI extends StatelessWidget {
   const LandingPageUI({Key? key}) : super(key: key);
@@ -12,8 +12,6 @@ class LandingPageUI extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p2p = P2PService();
-
     final width = MediaQuery.of(context).size.width;
     final isLarge = width > 600;
 
@@ -32,12 +30,13 @@ class LandingPageUI extends StatelessWidget {
               Expanded(
                 child: Center(
                   child: ConstrainedBox(
-                    constraints:
-                        BoxConstraints(maxWidth: isLarge ? 520 : 420),
+                    constraints: BoxConstraints(maxWidth: isLarge ? 520 : 420),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // JOIN EXISTING COMMUNICATION
+                        //---------------------------------------------------------
+                        // JOIN EXISTING COMMUNICATION (CLIENT)
+                        //---------------------------------------------------------
                         _actionButton(
                           context,
                           label: 'Join Existing Communication',
@@ -45,13 +44,15 @@ class LandingPageUI extends StatelessWidget {
                           colorA: _accentRed,
                           colorB: _accentOrange,
                           onPressed: () async {
-                            await p2p.initialize();
-                            await p2p.discover();
+                            final ok = await PermissionService.requestP2PPermissions();
+                            if (!ok) {
+                              _showPermissionError(context);
+                              return;
+                            }
 
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) =>
-                                    const NetworkDashboardUI(isHost: false),
+                                builder: (_) => const NetworkDashboardUI(isHost: false),
                               ),
                             );
                           },
@@ -59,7 +60,9 @@ class LandingPageUI extends StatelessWidget {
 
                         const SizedBox(height: 18),
 
-                        // START NEW COMMUNICATION
+                        //---------------------------------------------------------
+                        // START NEW COMMUNICATION (HOST)
+                        //---------------------------------------------------------
                         _actionButton(
                           context,
                           label: 'Start New Communication',
@@ -67,13 +70,15 @@ class LandingPageUI extends StatelessWidget {
                           colorA: _accentOrange,
                           colorB: _accentRed,
                           onPressed: () async {
-                            await p2p.initialize();
-                            await p2p.createGroup();
+                            final ok = await PermissionService.requestP2PPermissions();
+                            if (!ok) {
+                              _showPermissionError(context);
+                              return;
+                            }
 
                             Navigator.of(context).push(
                               MaterialPageRoute(
-                                builder: (_) =>
-                                    const NetworkDashboardUI(isHost: true),
+                                builder: (_) => const NetworkDashboardUI(isHost: true),
                               ),
                             );
                           },
@@ -99,15 +104,23 @@ class LandingPageUI extends StatelessWidget {
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {},
-        backgroundColor: _accentRed,
-        child: const Icon(Icons.mic, color: Colors.white),
-        tooltip: 'Voice commands',
+    );
+  }
+
+  //----------------------------------------------
+  // ERROR SNACKBAR
+  //----------------------------------------------
+  void _showPermissionError(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Please grant the required permissions'),
       ),
     );
   }
 
+  //----------------------------------------------
+  // TOP LOGO + PROFILE BUTTON
+  //----------------------------------------------
   Widget _buildTopSection(BuildContext context, bool isLarge) {
     return Stack(
       children: [
@@ -125,8 +138,7 @@ class LandingPageUI extends StatelessWidget {
                     end: Alignment.bottomRight,
                     colors: [Color(0xFF263244), Color(0xFF0F1724)],
                   ),
-                  border:
-                      Border.all(color: Colors.white12, width: 1.5),
+                  border: Border.all(color: Colors.white12, width: 1.5),
                 ),
                 child: Center(
                   child: Text(
@@ -163,6 +175,7 @@ class LandingPageUI extends StatelessWidget {
             ],
           ),
         ),
+
         Positioned(
           right: 0,
           top: 0,
@@ -170,8 +183,7 @@ class LandingPageUI extends StatelessWidget {
             icon: const Icon(Icons.person, color: Colors.white),
             onPressed: () {
               Navigator.of(context).push(
-                MaterialPageRoute(
-                    builder: (_) => const ProfilePage()),
+                MaterialPageRoute(builder: (_) => const ProfilePage()),
               );
             },
             tooltip: 'Profile',
@@ -181,6 +193,9 @@ class LandingPageUI extends StatelessWidget {
     );
   }
 
+  //----------------------------------------------
+  // BUTTON BUILDER
+  //----------------------------------------------
   Widget _actionButton(
     BuildContext context, {
     required String label,
@@ -193,24 +208,20 @@ class LandingPageUI extends StatelessWidget {
       width: double.infinity,
       height: 72,
       child: ElevatedButton.icon(
-        onPressed: onPressed ?? () {},
+        onPressed: onPressed,
         icon: Icon(icon, size: 28, color: Colors.white),
         label: Text(
           label,
-          style:
-              const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
         ),
         style: ElevatedButton.styleFrom(
           foregroundColor: Colors.white,
-          padding:
-              const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20)),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           elevation: 6,
           backgroundColor: Colors.transparent,
         ).copyWith(
-          backgroundColor:
-              MaterialStateProperty.resolveWith((states) => null),
+          backgroundColor: MaterialStateProperty.resolveWith((states) => null),
         ),
       ),
     );
