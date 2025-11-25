@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_p2p_connection/flutter_p2p_connection.dart';
+import 'package:provider/provider.dart';
+import 'package:device_info_plus/device_info_plus.dart';
+import 'dart:io';
 import 'chatPage.dart';
+import 'debugDatabasePage.dart';
 import '../services/p2p_service.dart';
 import '../services/permissions_service.dart';
+import '../providers/beacon_provider.dart';
 
 class NetworkDashboardUI extends StatefulWidget {
   final bool isHost;
@@ -17,6 +22,7 @@ class _NetworkDashboardUIState extends State<NetworkDashboardUI> {
   // Services
   P2PHostService? _hostService;
   P2PClientService? _clientService;
+  late BeaconProvider _beaconProvider;
 
   // Host state
   String? _hotspotSSID;
@@ -28,7 +34,12 @@ class _NetworkDashboardUIState extends State<NetworkDashboardUI> {
   bool _isScanning = false;
   bool _isClientConnected = false;
   String? _connectedDeviceName;
+  String? _connectedEventId;
   List<BleDiscoveredDevice> _discoveredDevices = [];
+
+  // Device info for database
+  String? _deviceUUID;
+  String? _deviceName;
 
   // UI colors
   static const Color _bgColor = Color(0xFF0F1724);
@@ -44,80 +55,146 @@ class _NetworkDashboardUIState extends State<NetworkDashboardUI> {
   @override
   void initState() {
     super.initState();
+    _beaconProvider = Provider.of<BeaconProvider>(context, listen: false);
     _prepareAndInit();
   }
 
   Future<void> _prepareAndInit() async {
-    // Ensure required runtime permissions first
-    final ok = await PermissionService.requestP2PPermissions();
-    if (!ok) {
+    try {
+      // Get device info for database initialization
+      await _initializeDeviceInfo();
+
+      // Ensure required runtime permissions first
+      final ok = await PermissionService.requestP2PPermissions();
+      if (!ok) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Required permissions not granted')),
+          );
+          Navigator.of(context).pop();
+        }
+        return;
+      }
+
+      // Initialize device in database
+      if (_deviceUUID != null && _deviceName != null) {
+        await _beaconProvider.loadOrCreateDevice(
+          _deviceUUID!,
+          _deviceName!,
+          widget.isHost,
+        );
+      }
+
+      if (widget.isHost) {
+        _initHost();
+      } else {
+        _initClient();
+      }
+    } catch (e) {
+      debugPrint('Initialization error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Required permissions not granted')),
+          SnackBar(content: Text('Initialization failed: $e')),
         );
         Navigator.of(context).pop();
       }
-      return;
     }
+  }
 
-    if (widget.isHost) {
-      _initHost();
-    } else {
-      _initClient();
+  Future<void> _initializeDeviceInfo() async {
+    try {
+      DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+      if (Platform.isAndroid) {
+        AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+        _deviceUUID = androidInfo.id;
+        _deviceName = androidInfo.model;
+      } else if (Platform.isIOS) {
+        IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
+        _deviceUUID = iosInfo.identifierForVendor ?? 'unknown_ios';
+        _deviceName = iosInfo.model;
+      } else {
+        // Fallback for other platforms
+        _deviceUUID = 'unknown_${DateTime.now().millisecondsSinceEpoch}';
+        _deviceName = 'Unknown Device';
+      }
+    } catch (e) {
+      debugPrint('Error getting device info: $e');
+      _deviceUUID = 'unknown_${DateTime.now().millisecondsSinceEpoch}';
+      _deviceName = 'Unknown Device';
     }
   }
 
   Future<void> _initHost() async {
-    _hostService = P2PHostService();
-    await _hostService!.initialize();
-
-    // Create group and then fetch initial state
     try {
+      _hostService = P2PHostService();
+      await _hostService!.initialize();
+
+      // Create group and then fetch initial state
       final state = await _hostService!.createGroup();
       setState(() {
         _hotspotSSID = state.ssid;
         _hotspotPSK = state.preSharedKey;
         _hostIP = state.hostIpAddress;
       });
+
+      // Store event in database
+      await _beaconProvider.startHosting(
+        state.ssid ?? 'Unknown',
+        state.preSharedKey ?? 'Unknown',
+        state.hostIpAddress ?? 'Unknown',
+      );
+
+      // Listen for connected clients
+      _clientListStream = _hostService!.clientStream();
+      _clientListStream!.listen((clients) {
+        if (mounted) {
+          setState(() => _connectedClients = clients);
+          debugPrint('Host - connected clients updated: ${clients.length}');
+          
+          // Refresh provider connections and add any new clients
+          _updateConnectedClients(clients);
+        }
+      });
+
+      // Listen for incoming messages
+      _hostMessageStream = _hostService!.messageStream();
+      _hostMessageStream!.listen((msg) {
+        debugPrint('Host received message: $msg');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Msg: $msg')));
+        }
+      });
     } catch (e) {
-      debugPrint('Host createGroup failed: $e');
+      debugPrint('Host initialization failed: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to create group: $e')),
+          SnackBar(content: Text('Host init failed: $e')),
         );
       }
-      return;
     }
-
-    // Listen for connected clients
-    _clientListStream = _hostService!.clientStream();
-    _clientListStream!.listen((clients) {
-      setState(() => _connectedClients = clients);
-      debugPrint('Host - connected clients updated: ${clients.length}');
-    });
-
-    // Listen for incoming messages
-    _hostMessageStream = _hostService!.messageStream();
-    _hostMessageStream!.listen((msg) {
-      debugPrint('Host received message: $msg');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Msg: $msg')));
-      }
-    });
   }
 
   Future<void> _initClient() async {
-    _clientService = P2PClientService();
-    await _clientService!.initialize();
+    try {
+      _clientService = P2PClientService();
+      await _clientService!.initialize();
 
-    // Listen for messages from host once connected
-    _clientMessageStream = _clientService!.messageStream();
-    _clientMessageStream!.listen((msg) {
-      debugPrint('Client received message: $msg');
+      // Listen for messages from host once connected
+      _clientMessageStream = _clientService!.messageStream();
+      _clientMessageStream!.listen((msg) {
+        debugPrint('Client received message: $msg');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Msg: $msg')));
+        }
+      });
+    } catch (e) {
+      debugPrint('Client initialization failed: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Msg: $msg')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Client init failed: $e')),
+        );
       }
-    });
+    }
   }
 
   Future<void> _startScan() async {
@@ -161,11 +238,24 @@ class _NetworkDashboardUIState extends State<NetworkDashboardUI> {
 
     try {
       await _clientService!.connect(device);
-      // After connect we rely on client stream state updates (if available)
+      
+      // For now, we'll use a simpler approach:
+      // Query all active events and join the first one found
+      // In a production app, the host would communicate its event ID via P2P
+      final activeEvent = await _beaconProvider.db.getActiveEvent();
+      
+      if (activeEvent != null) {
+        // Join the host's event
+        await _beaconProvider.joinEvent(activeEvent['id']);
+        debugPrint('Client joined event: ${activeEvent['id']}');
+      } else {
+        debugPrint('No active event found - client may need to wait for host to advertise');
+      }
+
       setState(() {
         _isClientConnected = true;
         _connectedDeviceName = device.deviceName;
-        _hostIP = null; // plugin may provide later via client state stream
+        _connectedEventId = activeEvent?['id'].toString();
       });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Connected to ${device.deviceName}')));
     } catch (e) {
@@ -187,8 +277,142 @@ class _NetworkDashboardUIState extends State<NetworkDashboardUI> {
     }
   }
 
+  Future<void> _keepConnectionAlive() async {
+    if (!widget.isHost && _connectedEventId != null) {
+      try {
+        final connections = await _beaconProvider.db.getActiveEventConnections(int.parse(_connectedEventId!));
+        if (connections.isNotEmpty) {
+          await _beaconProvider.updateLastSeen(connections.first['id']);
+        }
+      } catch (e) {
+        debugPrint('Keep alive error: $e');
+      }
+    }
+  }
+
+  Future<void> _updateConnectedClients(List<P2pClientInfo> clients) async {
+    if (_beaconProvider.activeEvent == null) return;
+
+    try {
+      final eventId = _beaconProvider.activeEvent!['id'] as int;
+      
+      // Get all currently connected devices in the database for this event
+      final existingConnections = 
+          await _beaconProvider.db.getActiveEventConnections(eventId);
+      
+      // Extract device IDs that are already in the database
+      final existingDeviceIds = existingConnections
+          .map((conn) => conn['device_id'] as int)
+          .toSet();
+
+      debugPrint('Existing connections: ${existingDeviceIds.length}');
+
+      // For each connected client, ensure they're in the database
+      for (final client in clients) {
+        try {
+          // Try to find or create device entry for this client
+          final clientDevice = await _beaconProvider.db.getDeviceByUUID(client.id);
+          
+          int deviceId;
+          if (clientDevice == null) {
+            // Create new device entry for the connected client
+            deviceId = await _beaconProvider.db.insertDevice(
+              client.id,
+              client.username,
+              false, // Client is not a host
+            );
+            debugPrint('Created new device for client: ${client.username}');
+          } else {
+            deviceId = clientDevice['id'] as int;
+          }
+
+          // Add connection if not already present
+          if (!existingDeviceIds.contains(deviceId)) {
+            await _beaconProvider.db.addDeviceConnection(eventId, deviceId);
+            existingDeviceIds.add(deviceId);
+            debugPrint('Added connection for client: ${client.username}');
+            
+            // Log the connection event
+            await _beaconProvider.db.insertLog(
+              _beaconProvider.currentDevice!['id'] as int,
+              eventId,
+              'Device with id $deviceId connected to the event $eventId',
+            );
+            debugPrint('Logged connection for device: $deviceId');
+          } else {
+            // Update last seen for existing connection
+            final connIndex = existingConnections
+                .indexWhere((conn) => conn['device_id'] == deviceId);
+            if (connIndex >= 0) {
+              await _beaconProvider.db
+                  .updateLastSeen(existingConnections[connIndex]['id'] as int);
+            }
+          }
+        } catch (e) {
+          debugPrint('Error processing client ${client.username}: $e');
+        }
+      }
+
+      // Check for disconnected clients and handle removal
+      final connectedClientIds = clients.map((c) => c.id).toSet();
+      final disconnectedDeviceIds = <int>[];
+      
+      for (final existingDeviceId in existingDeviceIds) {
+        // Check if this device ID is still connected
+        final clientDevice = await _beaconProvider.db.getDeviceById(existingDeviceId);
+        if (clientDevice != null) {
+          final isStillConnected = connectedClientIds.contains(clientDevice['device_uuid']);
+          
+          if (!isStillConnected) {
+            disconnectedDeviceIds.add(existingDeviceId);
+          }
+        }
+      }
+
+      // Handle disconnected devices
+      for (final deviceId in disconnectedDeviceIds) {
+        try {
+          // Find and disconnect the connection record
+          final connToRemove = existingConnections.firstWhere(
+            (c) => c['device_id'] == deviceId,
+            orElse: () => {},
+          );
+
+          if (connToRemove.isNotEmpty) {
+            // Update is_current to 0
+            await _beaconProvider.db.disconnectConnection(connToRemove['id']);
+            
+            // Delete the device from devices table
+            await _beaconProvider.db.deleteDevice(deviceId);
+            
+            // Log the disconnection
+            await _beaconProvider.db.insertLog(
+              _beaconProvider.currentDevice!['id'] as int,
+              eventId,
+              'Device with id $deviceId has left the event $eventId',
+            );
+            
+            debugPrint('Device $deviceId disconnected and removed from database');
+          }
+        } catch (e) {
+          debugPrint('Error removing disconnected device $deviceId: $e');
+        }
+      }
+
+      await _beaconProvider.refreshConnections();
+      await _beaconProvider.loadLogs();
+    } catch (e) {
+      debugPrint('Error updating connected clients: $e');
+    }
+  }
+
   @override
   void dispose() {
+    // Stop hosting if active
+    if (widget.isHost && _beaconProvider.activeEvent != null) {
+      _beaconProvider.stopHosting();
+    }
+
     _hostService?.dispose();
     _clientService?.dispose();
     super.dispose();
@@ -218,6 +442,15 @@ class _NetworkDashboardUIState extends State<NetworkDashboardUI> {
           ],
         ),
         actions: [
+          IconButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const DebugDatabasePage()),
+              );
+            },
+            icon: const Icon(Icons.bug_report),
+            tooltip: 'Database Debug',
+          ),
           IconButton(
             onPressed: _showInfoDialog,
             icon: const Icon(Icons.info_outline),

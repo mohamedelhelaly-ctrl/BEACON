@@ -1,7 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/beacon_provider.dart';
-import 'debugDatabasePage.dart';
+
+// --- MOCK PROVIDER FOR DUMMY DATA ---
+// (Paste this class at the bottom of your file or keep it here for testing)
+class BeaconProvider extends ChangeNotifier {
+  Map<String, dynamic>? _user;
+  Map<String, dynamic>? get user => _user;
+
+  // Mock Database helper
+  final _MockDB db = _MockDB();
+
+  Future<void> loadUser() async {
+    // Simulate loading delay
+    await Future.delayed(const Duration(milliseconds: 800));
+    _user = {
+      'name': 'Alex Mercer',
+      'emergency_contact': '+1 (555) 019-2834',
+    };
+    notifyListeners();
+  }
+
+  void addLog(String log) {
+    print("Log added: $log");
+  }
+}
+
+class _MockDB {
+  Future<dynamic> getUser() async => null;
+  Future<void> updateUser(String n, String e) async {}
+  Future<void> insertUser(String n, String e) async {}
+}
+// -------------------------------------
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({Key? key}) : super(key: key);
@@ -27,51 +56,43 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _loadUserProfile() async {
-    final provider = context.read<BeaconProvider>();
-    await provider.loadUser();
+    // --- DUMMY DATA INJECTION START ---
+    print('Loading Dummy Data...');
     
-    if (provider.user != null) {
-      _nameController.text = provider.user?['name'] ?? '';
-      _emergencyController.text = provider.user?['emergency_contact'] ?? '';
-    }
+    // Simulate network/db delay
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (!mounted) return;
+
+    setState(() {
+      _nameController.text = "Alex Mercer";
+      _emergencyController.text = "+1 (555) 019-2834";
+      // Optional: If you had a phone field
+      _phoneController.text = "+1 (555) 123-4567"; 
+    });
+    // --- DUMMY DATA INJECTION END ---
   }
 
   Future<void> _saveProfile() async {
-    final provider = context.read<BeaconProvider>();
-    
     if (_nameController.text.isNotEmpty && _emergencyController.text.isNotEmpty) {
       print('[ProfilePage] Saving profile: ${_nameController.text}');
-      
-      // Check if user exists
-      final existingUser = await provider.db.getUser();
-      
-      if (existingUser != null) {
-        // Update existing user
-        print('[ProfilePage] Updating existing user...');
-        await provider.db.updateUser(
-          _nameController.text,
-          _emergencyController.text,
-        );
-      } else {
-        // Insert new user
-        print('[ProfilePage] Creating new user...');
-        await provider.db.insertUser(
-          _nameController.text,
-          _emergencyController.text,
-        );
-      }
-      
-      await provider.loadUser();
+
+      // --- SIMULATED SAVE START ---
+      await Future.delayed(const Duration(seconds: 1)); // Fake saving delay
       
       if (mounted) {
         setState(() {
           _isEditing = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile saved successfully!')),
+          const SnackBar(
+            content: Text('Profile saved successfully! (Simulated)'),
+            backgroundColor: Colors.green,
+          ),
         );
-        print('[ProfilePage] Profile saved successfully');
       }
+      // --- SIMULATED SAVE END ---
+      
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill all fields')),
@@ -187,6 +208,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
               ),
+              cursorColor: _accentOrange,
               decoration: InputDecoration(
                 labelText: label,
                 labelStyle: const TextStyle(
@@ -195,10 +217,10 @@ class _ProfilePageState extends State<ProfilePage> {
                   fontWeight: FontWeight.w600,
                 ),
                 border: InputBorder.none,
-                enabledBorder: UnderlineInputBorder(
+                enabledBorder: const UnderlineInputBorder(
                   borderSide: BorderSide(color: Colors.white24),
                 ),
-                focusedBorder: UnderlineInputBorder(
+                focusedBorder: const UnderlineInputBorder(
                   borderSide: BorderSide(color: _accentOrange),
                 ),
               ),
@@ -244,12 +266,9 @@ class _ProfilePageState extends State<ProfilePage> {
               size: 28,
             ),
             onPressed: () {
-              print('[ProfilePage] Edit button pressed. Current _isEditing: $_isEditing');
               if (_isEditing) {
-                print('[ProfilePage] Saving profile...');
                 _saveProfile();
               } else {
-                print('[ProfilePage] Entering edit mode...');
                 setState(() {
                   _isEditing = true;
                 });
@@ -259,9 +278,11 @@ class _ProfilePageState extends State<ProfilePage> {
           ),
         ],
       ),
+      // Wrapped in consumer, but using dummy data in local state
       body: Consumer<BeaconProvider>(
         builder: (context, beaconProvider, child) {
           return SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
@@ -322,7 +343,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 const SizedBox(height: 40),
 
                 // Medical Information Button
-                Container(
+                SizedBox(
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton.icon(
@@ -359,9 +380,8 @@ class _ProfilePageState extends State<ProfilePage> {
                   height: 56,
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const DebugDatabasePage()),
+                      ScaffoldMessenger.of(context).showSnackBar(
+                         const SnackBar(content: Text('Debug DB Page is stubbed')),
                       );
                     },
                     icon: const Icon(Icons.bug_report, color: Colors.white),

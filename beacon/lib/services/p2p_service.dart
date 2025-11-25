@@ -67,6 +67,10 @@ class P2PClientService {
     await _client.connectWithDevice(device);
   }
 
+  Future<void> disconnect() async {
+    await _client.disconnect();
+  }
+
   /// Listen for text messages
   Stream<String> messageStream() {
     return _client.streamReceivedTexts();

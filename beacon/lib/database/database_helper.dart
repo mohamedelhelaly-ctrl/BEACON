@@ -17,125 +17,243 @@ class DatabaseHelper {
 
   Future<Database> _initDB() async {
     Directory dir = await getApplicationDocumentsDirectory();
-    String path = join(dir.path, "beacon.db");
+    String dbPath = join(dir.path, "beacon_secure.db");
 
     return await openDatabase(
-      path,
-      password: "12345",  // Database encryption password
-      version: 2,
+      dbPath,
+      password: "12345",
+      version: 1,
       onCreate: _createDB,
-      onUpgrade: _upgradeDB,
     );
   }
 
-  Future _upgradeDB(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      print('[DatabaseHelper] Upgrading database from version $oldVersion to $newVersion');
-      try {
-        // Check if created_at column already exists
-        final result = await db.rawQuery(
-          "PRAGMA table_info(user_profile)"
-        );
-        bool hasCreatedAt = result.any((col) => col['name'] == 'created_at');
-        
-        if (!hasCreatedAt) {
-          print('[DatabaseHelper] Adding created_at column to user_profile');
-          await db.execute('ALTER TABLE user_profile ADD COLUMN created_at TEXT');
-        }
-      } catch (e) {
-        print('[DatabaseHelper] Error upgrading database: $e');
-      }
-    }
-  }
-
   Future _createDB(Database db, int version) async {
-    // 1. User Profile Table
+    await db.execute("PRAGMA foreign_keys = ON");
+
+    // ============= DEVICES TABLE =============
     await db.execute('''
-      CREATE TABLE user_profile (
+      CREATE TABLE devices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_uuid TEXT UNIQUE,
         name TEXT,
-        emergency_contact TEXT,
+        is_host INTEGER,
         created_at TEXT
       )
     ''');
 
-    // 2. Devices Table (Discovered + Connected Devices)
+    // ============= EVENTS TABLE =============
     await db.execute('''
-      CREATE TABLE devices (
+      CREATE TABLE events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        device_name TEXT,
-        device_address TEXT,
-        last_seen TEXT
+        host_id INTEGER,
+        ssid TEXT,
+        password TEXT,
+        host_ip TEXT,
+        started_at TEXT,
+        ended_at TEXT,
+        FOREIGN KEY(host_id) REFERENCES devices(id)
       )
     ''');
 
-    // 3. Activity Logs Table
+    // ============= EVENT_CONNECTIONS TABLE =============
+    await db.execute('''
+      CREATE TABLE event_connections (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id INTEGER,
+        device_id INTEGER,
+        joined_at TEXT,
+        last_seen TEXT,
+        is_current INTEGER,
+        FOREIGN KEY(event_id) REFERENCES events(id),
+        FOREIGN KEY(device_id) REFERENCES devices(id)
+      )
+    ''');
+
+    // ============= LOGS TABLE =============
     await db.execute('''
       CREATE TABLE logs (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        event TEXT,
-        timestamp TEXT
+        event_id INTEGER,
+        device_id INTEGER,
+        message TEXT,
+        timestamp TEXT,
+        FOREIGN KEY(event_id) REFERENCES events(id),
+        FOREIGN KEY(device_id) REFERENCES devices(id)
       )
     ''');
   }
 
-  Future<int> insertUser(String name, String contact) async {
-    final db = await instance.database;
-    return await db.insert('user_profile', {
-      'name': name,
-      'emergency_contact': contact,
-      'created_at': DateTime.now().toString()
-    });
-  }
+  // =====================================================
+  //                     DEVICES CRUD
+  // =====================================================
 
-  Future<int> updateUser(String name, String contact) async {
-    final db = await instance.database;
-    return await db.update(
-      'user_profile',
+  Future<int> insertDevice(String uuid, String name, bool isHost) async {
+    final db = await database;
+
+    return await db.insert(
+      "devices",
       {
+        'device_uuid': uuid,
         'name': name,
-        'emergency_contact': contact,
+        'is_host': isHost ? 1 : 0,
+        'created_at': DateTime.now().toString(),
       },
-      where: 'id = ?',
-      whereArgs: [1], // Update the first user
+      conflictAlgorithm: ConflictAlgorithm.replace,
     );
   }
 
-  Future<Map<String, dynamic>?> getUser() async {
-    final db = await instance.database;
-    final res = await db.query('user_profile', limit: 1);
-    if (res.isNotEmpty) return res.first;
-    return null;
+  Future<Map<String, dynamic>?> getDeviceByUUID(String uuid) async {
+    final db = await database;
+    final res = await db.query(
+      "devices",
+      where: "device_uuid = ?",
+      whereArgs: [uuid],
+      limit: 1,
+    );
+    return res.isNotEmpty ? res.first : null;
   }
 
-  Future<int> insertDevice(String name, String address) async {
-    final db = await instance.database;
-    return await db.insert('devices', {
-      'device_name': name,
-      'device_address': address,
-      'last_seen': DateTime.now().toString(),
+  Future<Map<String, dynamic>?> getDeviceById(int id) async {
+    final db = await database;
+    final res = await db.query(
+      "devices",
+      where: "id = ?",
+      whereArgs: [id],
+      limit: 1,
+    );
+    return res.isNotEmpty ? res.first : null;
+  }
+
+  Future<void> deleteDevice(int deviceId) async {
+    final db = await database;
+    await db.delete(
+      "devices",
+      where: "id = ?",
+      whereArgs: [deviceId],
+    );
+  }
+
+  // =====================================================
+  //                     EVENTS CRUD
+  // =====================================================
+
+  Future<int> createEvent(int hostId, String ssid, String pwd, String ip) async {
+    final db = await database;
+
+    return await db.insert("events", {
+      "host_id": hostId,
+      "ssid": ssid,
+      "password": pwd,
+      "host_ip": ip,
+      "started_at": DateTime.now().toString(),
+      "ended_at": null,
     });
   }
 
-  Future<List<Map<String, dynamic>>> getDevices() async {
-    final db = await instance.database;
-    return await db.query('devices');
+  Future<void> endEvent(int eventId) async {
+    final db = await database;
+
+    await db.update(
+      "events",
+      {"ended_at": DateTime.now().toString()},
+      where: "id = ?",
+      whereArgs: [eventId],
+    );
   }
 
-  Future<int> insertLog(String event) async {
-    final db = await instance.database;
-    return await db.insert('logs', {
-      'event': event,
-      'timestamp': DateTime.now().toString()
+  Future<Map<String, dynamic>?> getActiveEvent() async {
+    final db = await database;
+
+    final res = await db.query(
+      "events",
+      where: "ended_at IS NULL",
+      limit: 1,
+    );
+
+    return res.isNotEmpty ? res.first : null;
+  }
+
+  // =====================================================
+  //              EVENT CONNECTIONS CRUD
+  // =====================================================
+
+  Future<int> addDeviceConnection(int eventId, int deviceId) async {
+    final db = await database;
+
+    return await db.insert("event_connections", {
+      "event_id": eventId,
+      "device_id": deviceId,
+      "joined_at": DateTime.now().toString(),
+      "last_seen": DateTime.now().toString(),
+      "is_current": 1,
     });
   }
 
-  Future<List<Map<String, dynamic>>> getLogs() async {
-    final db = await instance.database;
-    return await db.query('logs');
+  Future<void> updateLastSeen(int connectionId) async {
+    final db = await database;
+    await db.update(
+      "event_connections",
+      {"last_seen": DateTime.now().toString()},
+      where: "id = ?",
+      whereArgs: [connectionId],
+    );
   }
 
+  Future<void> disconnectConnection(int connectionId) async {
+    final db = await database;
+    await db.update(
+      "event_connections",
+      {"is_current": 0},
+      where: "id = ?",
+      whereArgs: [connectionId],
+    );
+  }
 
+  Future<List<Map<String, dynamic>>> getActiveEventConnections(int eventId) async {
+    final db = await database;
 
+    return await db.query(
+      "event_connections",
+      where: "event_id = ? AND is_current = 1",
+      whereArgs: [eventId],
+    );
+  }
 
+  Future<List<Map<String, dynamic>>> getAllConnectedDevicesInEvent(int eventId) async {
+    final db = await database;
+
+    return await db.rawQuery('''
+      SELECT devices.*
+      FROM devices
+      JOIN event_connections
+      ON devices.id = event_connections.device_id
+      WHERE event_connections.event_id = ?
+    ''', [eventId]);
+  }
+
+  // =====================================================
+  //                     LOGS CRUD
+  // =====================================================
+
+  Future<int> insertLog(int deviceId, int? eventId, String message) async {
+    final db = await database;
+
+    return await db.insert("logs", {
+      "device_id": deviceId,
+      "event_id": eventId,
+      "message": message,
+      "timestamp": DateTime.now().toString(),
+    });
+  }
+
+  Future<List<Map<String, dynamic>>> getEventLogs(int eventId) async {
+    final db = await database;
+
+    return await db.query(
+      "logs",
+      where: "event_id = ?",
+      whereArgs: [eventId],
+      orderBy: "timestamp DESC",
+    );
+  }
 }
