@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite_sqlcipher/sqflite.dart';
@@ -223,7 +224,7 @@ class DatabaseHelper {
     final db = await database;
 
     return await db.rawQuery('''
-      SELECT devices.*
+      SELECT devices.id, devices.device_uuid, devices.name, devices.is_host, devices.created_at
       FROM devices
       JOIN event_connections
       ON devices.id = event_connections.device_id
@@ -255,5 +256,138 @@ class DatabaseHelper {
       whereArgs: [eventId],
       orderBy: "timestamp DESC",
     );
+  }
+
+  // =====================================================
+  //                  SYNC IMPORT
+  // =====================================================
+
+  /// Import synced event data from host
+  /// Upserts event, devices, connections, and logs
+  Future<void> importEventSync(Map<String, dynamic> syncData) async {
+    final db = await database;
+
+    try {
+      await db.transaction((txn) async {
+        // Upsert event
+        if (syncData['event'] != null) {
+          final event = syncData['event'] as Map<String, dynamic>;
+          try {
+            await txn.insert(
+              "events",
+              {
+                'id': event['id'],
+                'host_id': event['host_id'],
+                'ssid': event['ssid'],
+                'password': event['password'],
+                'host_ip': event['host_ip'],
+                'started_at': event['started_at'],
+                'ended_at': event['ended_at'],
+              },
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          } catch (e) {
+            debugPrint('Error upserting event: $e');
+            rethrow;
+          }
+        }
+
+        // Upsert devices
+        if (syncData['devices'] != null) {
+          final devices = syncData['devices'] as List<dynamic>;
+          debugPrint('Importing ${devices.length} devices...');
+          for (final device in devices) {
+            final deviceMap = device as Map<String, dynamic>;
+            try {
+              await txn.insert(
+                "devices",
+                {
+                  'id': deviceMap['id'],
+                  'device_uuid': deviceMap['device_uuid'],
+                  'name': deviceMap['name'],
+                  'is_host': deviceMap['is_host'],
+                  'created_at': deviceMap['created_at'],
+                },
+                conflictAlgorithm: ConflictAlgorithm.replace,
+              );
+            } catch (e) {
+              debugPrint('Error upserting device ${deviceMap['id']}: $e');
+            }
+          }
+        }
+
+        // Upsert event connections
+        if (syncData['connections'] != null) {
+          final connections = syncData['connections'] as List<dynamic>;
+          debugPrint('Importing ${connections.length} connections...');
+          for (final conn in connections) {
+            final connMap = conn as Map<String, dynamic>;
+            try {
+              await txn.insert(
+                "event_connections",
+                {
+                  'id': connMap['id'],
+                  'event_id': connMap['event_id'],
+                  'device_id': connMap['device_id'],
+                  'joined_at': connMap['joined_at'],
+                  'last_seen': connMap['last_seen'],
+                  'is_current': connMap['is_current'],
+                },
+                conflictAlgorithm: ConflictAlgorithm.replace,
+              );
+            } catch (e) {
+              debugPrint('Error upserting connection ${connMap['id']}: $e');
+            }
+          }
+        }
+
+        // Upsert logs
+        if (syncData['logs'] != null) {
+          final logs = syncData['logs'] as List<dynamic>;
+          debugPrint('Importing ${logs.length} logs...');
+          for (final log in logs) {
+            final logMap = log as Map<String, dynamic>;
+            try {
+              await txn.insert(
+                "logs",
+                {
+                  'id': logMap['id'],
+                  'event_id': logMap['event_id'],
+                  'device_id': logMap['device_id'],
+                  'message': logMap['message'],
+                  'timestamp': logMap['timestamp'],
+                },
+                conflictAlgorithm: ConflictAlgorithm.replace,
+              );
+            } catch (e) {
+              debugPrint('Error upserting log ${logMap['id']}: $e');
+            }
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint('Transaction failed: $e');
+      rethrow;
+    }
+  }
+
+  /// Build a sync object from current active event
+  /// Returns null if no active event
+  Future<Map<String, dynamic>?> buildEventSync() async {
+    final event = await getActiveEvent();
+    if (event == null) return null;
+
+    final eventId = event['id'] as int;
+    final devices = await getAllConnectedDevicesInEvent(eventId);
+    final connections = await getActiveEventConnections(eventId);
+    final logs = await getEventLogs(eventId);
+
+    return {
+      'type': 'EVENT_SYNC',
+      'event': event,
+      'devices': devices,
+      'connections': connections,
+      'logs': logs,
+    };
   }
 }

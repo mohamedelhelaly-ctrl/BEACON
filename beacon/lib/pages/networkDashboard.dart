@@ -29,6 +29,7 @@ class _NetworkDashboardUIState extends State<NetworkDashboardUI> {
   String? _hotspotPSK;
   String? _hostIP;
   List<P2pClientInfo> _connectedClients = [];
+  Set<String> _lastSyncedClientIds = {}; // Track synced clients to avoid repeated sends
 
   // Client state
   bool _isScanning = false;
@@ -144,17 +145,33 @@ class _NetworkDashboardUIState extends State<NetworkDashboardUI> {
         state.hostIpAddress ?? 'Unknown',
       );
 
-      // Listen for connected clients
-      _clientListStream = _hostService!.clientStream();
-      _clientListStream!.listen((clients) {
-        if (mounted) {
-          setState(() => _connectedClients = clients);
-          debugPrint('Host - connected clients updated: ${clients.length}');
-          
-          // Refresh provider connections and add any new clients
-          _updateConnectedClients(clients);
-        }
-      });
+// Listen for connected clients
+_clientListStream = _hostService!.clientStream();
+_clientListStream!.listen((clients) async {
+  if (!mounted) return;
+
+  setState(() => _connectedClients = clients);
+  debugPrint('Host - connected clients updated: ${clients.length}');
+
+  // Wait for DB update BEFORE sending sync
+  await _updateConnectedClients(clients);
+
+  // Detect new clients
+  final currentClientIds = clients.map((c) => c.id).toSet();
+  final hasNewClient =
+      !currentClientIds.containsAll(_lastSyncedClientIds) ||
+      currentClientIds.length > _lastSyncedClientIds.length;
+
+  if (hasNewClient) {
+    _lastSyncedClientIds = currentClientIds;
+
+    // Send event sync AFTER database is fully updated
+    await _sendEventSync();
+
+    debugPrint('Host detected new client(s), DB updated, sync sent');
+  }
+});
+
 
       // Listen for incoming messages
       _hostMessageStream = _hostService!.messageStream();
@@ -183,8 +200,16 @@ class _NetworkDashboardUIState extends State<NetworkDashboardUI> {
       _clientMessageStream = _clientService!.messageStream();
       _clientMessageStream!.listen((msg) {
         debugPrint('Client received message: $msg');
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Msg: $msg')));
+        
+        // Try to parse as sync message
+        final syncData = _clientService!.parseMessage(msg);
+        if (syncData != null) {
+          _handleEventSync(syncData);
+        } else {
+          // Regular text message
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Msg: $msg')));
+          }
         }
       });
     } catch (e) {
@@ -237,30 +262,63 @@ class _NetworkDashboardUIState extends State<NetworkDashboardUI> {
     if (_clientService == null) return;
 
     try {
+      // 1️⃣ Connect to the host using Wi-Fi Direct
       await _clientService!.connect(device);
-      
-      // For now, we'll use a simpler approach:
-      // Query all active events and join the first one found
-      // In a production app, the host would communicate its event ID via P2P
-      final activeEvent = await _beaconProvider.db.getActiveEvent();
-      
-      if (activeEvent != null) {
-        // Join the host's event
-        await _beaconProvider.joinEvent(activeEvent['id']);
-        debugPrint('Client joined event: ${activeEvent['id']}');
-      } else {
-        debugPrint('No active event found - client may need to wait for host to advertise');
-      }
 
+      if (!mounted) return;
+
+      // 2️⃣ Update the UI immediately
       setState(() {
         _isClientConnected = true;
         _connectedDeviceName = device.deviceName;
-        _connectedEventId = activeEvent?['id'].toString();
       });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Connected to ${device.deviceName}')));
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Connected to ${device.deviceName}')),
+      );
+
+      debugPrint('Client connected — waiting for EVENT_SYNC...');
+
     } catch (e) {
       debugPrint('Client connect error: $e');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Connect failed: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Connect failed: $e')),
+        );
+      }
+    }
+  }
+
+
+  Future<void> _sendEventSync() async {
+    if (!widget.isHost || _hostService == null) return;
+
+    try {
+      final syncData = await _beaconProvider.db.buildEventSync();
+      if (syncData != null) {
+        await _hostService!.sendEventSync(syncData);
+        debugPrint('Host sent EVENT_SYNC');
+      }
+    } catch (e) {
+      debugPrint('Error sending event sync: $e');
+    }
+  }
+
+  Future<void> _handleEventSync(Map<String, dynamic> syncData) async {
+    try {
+      await _beaconProvider.db.importEventSync(syncData);
+      await _beaconProvider.loadActiveEvent();
+      await _beaconProvider.refreshConnections();
+      await _beaconProvider.loadLogs();
+      
+      debugPrint('Client imported EVENT_SYNC');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Synced with host')),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error importing event sync: $e');
     }
   }
 

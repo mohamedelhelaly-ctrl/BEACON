@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter_p2p_connection/flutter_p2p_connection.dart';
 
 /// ===============================
@@ -32,6 +33,16 @@ class P2PHostService {
   /// Send text to all clients
   Future<void> sendMessage(String text) async {
     await _host.broadcastText(text);
+  }
+
+  /// Send sync data as JSON to all clients
+  Future<void> sendEventSync(Map<String, dynamic> syncData) async {
+    try {
+      final jsonStr = jsonEncode(syncData);
+      await _host.broadcastText(jsonStr);
+    } catch (e) {
+      rethrow;
+    }
   }
 
   void dispose() {
@@ -79,6 +90,20 @@ class P2PClientService {
   /// Send text to group
   Future<void> sendMessage(String text) async {
     await _client.broadcastText(text);
+  }
+
+  /// Parse incoming message - returns sync data if it's an EVENT_SYNC message
+  /// Returns null if it's a regular text message
+  Map<String, dynamic>? parseMessage(String rawMessage) {
+    try {
+      final decoded = jsonDecode(rawMessage) as Map<String, dynamic>;
+      if (decoded['type'] == 'EVENT_SYNC') {
+        return decoded;
+      }
+    } catch (e) {
+      // Not JSON or not a sync message, return null
+    }
+    return null;
   }
 
   void dispose() {
