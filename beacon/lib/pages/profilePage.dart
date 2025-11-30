@@ -1,36 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-
-// --- MOCK PROVIDER FOR DUMMY DATA ---
-// (Paste this class at the bottom of your file or keep it here for testing)
-class BeaconProvider extends ChangeNotifier {
-  Map<String, dynamic>? _user;
-  Map<String, dynamic>? get user => _user;
-
-  // Mock Database helper
-  final _MockDB db = _MockDB();
-
-  Future<void> loadUser() async {
-    // Simulate loading delay
-    await Future.delayed(const Duration(milliseconds: 800));
-    _user = {
-      'name': 'Alex Mercer',
-      'emergency_contact': '+1 (555) 019-2834',
-    };
-    notifyListeners();
-  }
-
-  void addLog(String log) {
-    print("Log added: $log");
-  }
-}
-
-class _MockDB {
-  Future<dynamic> getUser() async => null;
-  Future<void> updateUser(String n, String e) async {}
-  Future<void> insertUser(String n, String e) async {}
-}
-// -------------------------------------
+import '../providers/beacon_provider.dart';
+import 'dart:math';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({Key? key}) : super(key: key);
@@ -44,60 +15,22 @@ class _ProfilePageState extends State<ProfilePage> {
   static const Color _accentRed = Color(0xFFEF4444);
   static const Color _accentOrange = Color(0xFFFF8A4B);
 
-  final TextEditingController _nameController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _emergencyController = TextEditingController();
-  bool _isEditing = false;
+  late String _generatedPhoneNumber;
 
   @override
   void initState() {
     super.initState();
-    _loadUserProfile();
+    _generatedPhoneNumber = _generatePhoneNumber();
   }
 
-  Future<void> _loadUserProfile() async {
-    // --- DUMMY DATA INJECTION START ---
-    print('Loading Dummy Data...');
+  /// Generate a random phone number in format: +1 (XXX) XXX-XXXX
+  String _generatePhoneNumber() {
+    final random = Random();
+    final areaCode = 200 + random.nextInt(800); // 200-999
+    final exchange = 200 + random.nextInt(800); // 200-999
+    final lineNumber = random.nextInt(10000).toString().padLeft(4, '0');
     
-    // Simulate network/db delay
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    if (!mounted) return;
-
-    setState(() {
-      _nameController.text = "Alex Mercer";
-      _emergencyController.text = "+1 (555) 019-2834";
-      // Optional: If you had a phone field
-      _phoneController.text = "+1 (555) 123-4567"; 
-    });
-    // --- DUMMY DATA INJECTION END ---
-  }
-
-  Future<void> _saveProfile() async {
-    if (_nameController.text.isNotEmpty && _emergencyController.text.isNotEmpty) {
-      print('[ProfilePage] Saving profile: ${_nameController.text}');
-
-      // --- SIMULATED SAVE START ---
-      await Future.delayed(const Duration(seconds: 1)); // Fake saving delay
-      
-      if (mounted) {
-        setState(() {
-          _isEditing = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Profile saved successfully! (Simulated)'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-      // --- SIMULATED SAVE END ---
-      
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all fields')),
-      );
-    }
+    return '+1 ($areaCode) $exchange-$lineNumber';
   }
 
   Widget _buildProfileField({
@@ -165,80 +98,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _buildEditableField({
-    required String label,
-    required TextEditingController controller,
-    required IconData icon,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 20),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF263244), Color(0xFF1A2332)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _accentOrange, width: 2),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [_accentRed, _accentOrange],
-              ),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(
-              icon,
-              color: Colors.white,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: TextField(
-              controller: controller,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-              ),
-              cursorColor: _accentOrange,
-              decoration: InputDecoration(
-                labelText: label,
-                labelStyle: const TextStyle(
-                  color: _accentOrange,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-                border: InputBorder.none,
-                enabledBorder: const UnderlineInputBorder(
-                  borderSide: BorderSide(color: Colors.white24),
-                ),
-                focusedBorder: const UnderlineInputBorder(
-                  borderSide: BorderSide(color: _accentOrange),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _phoneController.dispose();
-    _emergencyController.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -258,31 +117,12 @@ class _ProfilePageState extends State<ProfilePage> {
             fontWeight: FontWeight.w700,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: Icon(
-              _isEditing ? Icons.check_circle : Icons.edit,
-              color: _isEditing ? Colors.green : _accentOrange,
-              size: 28,
-            ),
-            onPressed: () {
-              if (_isEditing) {
-                _saveProfile();
-              } else {
-                setState(() {
-                  _isEditing = true;
-                });
-              }
-            },
-            tooltip: _isEditing ? 'Save Profile' : 'Edit Profile',
-          ),
-        ],
       ),
-      // Wrapped in consumer, but using dummy data in local state
       body: Consumer<BeaconProvider>(
         builder: (context, beaconProvider, child) {
+          final deviceName = beaconProvider.currentDevice?['device_uuid'] ?? 'Unknown Device';
+
           return SingleChildScrollView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.all(24),
             child: Column(
               children: [
@@ -302,7 +142,7 @@ class _ProfilePageState extends State<ProfilePage> {
                     border: Border.all(color: Colors.white24, width: 3),
                   ),
                   child: const Icon(
-                    Icons.person,
+                    Icons.devices,
                     color: Colors.white,
                     size: 60,
                   ),
@@ -310,52 +150,35 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 const SizedBox(height: 40),
 
-                // Name Field
-                _isEditing
-                    ? _buildEditableField(
-                        label: 'NAME',
-                        controller: _nameController,
-                        icon: Icons.person_outline,
-                      )
-                    : _buildProfileField(
-                        label: 'NAME',
-                        value: _nameController.text.isNotEmpty 
-                            ? _nameController.text 
-                            : 'Not set',
-                        icon: Icons.person_outline,
-                      ),
+                // Device Name Field
+                _buildProfileField(
+                  label: 'DEVICE NAME',
+                  value: deviceName,
+                  icon: Icons.devices_other,
+                ),
 
-                // Emergency Contact Field
-                _isEditing
-                    ? _buildEditableField(
-                        label: 'EMERGENCY CONTACT',
-                        controller: _emergencyController,
-                        icon: Icons.emergency_outlined,
-                      )
-                    : _buildProfileField(
-                        label: 'EMERGENCY CONTACT',
-                        value: _emergencyController.text.isNotEmpty
-                            ? _emergencyController.text
-                            : 'Not set',
-                        icon: Icons.emergency_outlined,
-                      ),
+                // Phone Number Field (Randomly Generated)
+                _buildProfileField(
+                  label: 'PHONE NUMBER',
+                  value: _generatedPhoneNumber,
+                  icon: Icons.phone_outlined,
+                ),
 
                 const SizedBox(height: 40),
 
-                // Medical Information Button
+                // Regenerate Phone Number Button
                 SizedBox(
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      beaconProvider.addLog('Medical Information Accessed');
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Activity logged')),
-                      );
+                      setState(() {
+                        _generatedPhoneNumber = _generatePhoneNumber();
+                      });
                     },
-                    icon: const Icon(Icons.medical_services, color: Colors.white),
+                    icon: const Icon(Icons.refresh, color: Colors.white),
                     label: const Text(
-                      'Medical Information',
+                      'Generate New Phone Number',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 16,
@@ -374,30 +197,30 @@ class _ProfilePageState extends State<ProfilePage> {
 
                 const SizedBox(height: 20),
 
-                // View Database Button
+                // Medical Information Button
                 SizedBox(
                   width: double.infinity,
                   height: 56,
                   child: ElevatedButton.icon(
                     onPressed: () {
                       ScaffoldMessenger.of(context).showSnackBar(
-                         const SnackBar(content: Text('Debug DB Page is stubbed')),
+                        const SnackBar(content: Text('Medical information feature coming soon')),
                       );
                     },
-                    icon: const Icon(Icons.bug_report, color: Colors.white),
+                    icon: const Icon(Icons.medical_services, color: Colors.white),
                     label: const Text(
-                      'View Database',
+                      'Medical Information',
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.transparent,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
-                        side: const BorderSide(color: Colors.white38, width: 2),
+                        side: const BorderSide(color: _accentRed, width: 2),
                       ),
                     ),
                   ),

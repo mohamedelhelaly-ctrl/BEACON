@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'networkDashboard.dart';
-import 'profilePage.dart';
 import '../services/permissions_service.dart';
 
 class LandingPageUI extends StatelessWidget {
@@ -119,74 +118,53 @@ class LandingPageUI extends StatelessWidget {
   }
 
   //----------------------------------------------
-  // TOP LOGO + PROFILE BUTTON
+  // TOP LOGO
   //----------------------------------------------
   Widget _buildTopSection(BuildContext context, bool isLarge) {
-    return Stack(
+    return Column(
       children: [
-        Padding(
-          padding: const EdgeInsets.only(right: 56.0),
-          child: Column(
-            children: [
-              Container(
-                width: isLarge ? 110 : 88,
-                height: isLarge ? 110 : 88,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [Color(0xFF263244), Color(0xFF0F1724)],
-                  ),
-                  border: Border.all(color: Colors.white12, width: 1.5),
-                ),
-                child: Center(
-                  child: Text(
-                    'BEACON',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: isLarge ? 20 : 16,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ),
+        Container(
+          width: isLarge ? 110 : 88,
+          height: isLarge ? 110 : 88,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF263244), Color(0xFF0F1724)],
+            ),
+            border: Border.all(color: Colors.white12, width: 1.5),
+          ),
+          child: Center(
+            child: Text(
+              'BEACON',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: isLarge ? 20 : 16,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.2,
               ),
-              const SizedBox(height: 14),
-              Text(
-                'BEACON',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: isLarge ? 36 : 28,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.6,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Stay Connected When the Network Fails',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: isLarge ? 16 : 14,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
-
-        Positioned(
-          right: 0,
-          top: 0,
-          child: IconButton(
-            icon: const Icon(Icons.person, color: Colors.white),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const ProfilePage()),
-              );
-            },
-            tooltip: 'Profile',
+        const SizedBox(height: 14),
+        Text(
+          'BEACON',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: isLarge ? 36 : 28,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1.6,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Stay Connected When the Network Fails',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white70,
+            fontSize: isLarge ? 16 : 14,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],
