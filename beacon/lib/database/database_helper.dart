@@ -24,7 +24,7 @@ class DatabaseHelper {
       dbPath,
       password: "12345",
       version: 1,
-      onCreate: _createDB,
+      onCreate: _createDB
     );
   }
 

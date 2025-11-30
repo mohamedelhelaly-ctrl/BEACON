@@ -1,13 +1,44 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/message_provider.dart';
+import '../services/p2p_service.dart';
 
-class ChatPage extends StatelessWidget {
-  const ChatPage({Key? key}) : super(key: key);
+class ChatPage extends StatefulWidget {
+  final bool isHost;
+  final P2PHostService? hostService;
+  final P2PClientService? clientService;
+
+  const ChatPage({
+    Key? key,
+    required this.isHost,
+    this.hostService,
+    this.clientService,
+  }) : super(key: key);
+
+  @override
+  State<ChatPage> createState() => _ChatPageState();
+}
+
+class _ChatPageState extends State<ChatPage> {
+  late TextEditingController _messageController;
 
   static const Color _bgColor = Color(0xFF0F1724);
   static const Color _accentRed = Color(0xFFEF4444);
   static const Color _accentOrange = Color(0xFFFF8A4B);
 
-  Widget _buildAvatar({bool isMine = false, String name = 'Emergency Contact'}) {
+  @override
+  void initState() {
+    super.initState();
+    _messageController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _messageController.dispose();
+    super.dispose();
+  }
+
+  Widget _buildAvatar({bool isMine = false, String name = 'Contact'}) {
     return Container(
       width: 36,
       height: 36,
@@ -22,7 +53,7 @@ class ChatPage extends StatelessWidget {
       ),
       child: Center(
         child: Text(
-          isMine ? 'M' : name[0].toUpperCase(),
+          isMine ? 'M' : (name.isNotEmpty ? name[0].toUpperCase() : '?'),
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.bold,
@@ -35,53 +66,34 @@ class ChatPage extends StatelessWidget {
 
   Widget _buildMessage({
     required bool isMine,
+    required String senderName,
     required String text,
     required String time,
-    bool isEmergency = false,
   }) {
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 6, horizontal: 16),
       child: Row(
         mainAxisAlignment: isMine ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
-          if (!isMine) _buildAvatar(name: 'Emergency Responder Alpha'),
+          if (!isMine) _buildAvatar(name: senderName),
           if (!isMine) const SizedBox(width: 12),
           Flexible(
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                  color: isMine ? _accentRed : null,
-                  gradient: isMine
-                      ? null
-                      : LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [Color(0xFF263244), Color(0xFF0F1724)],
-                        ),
+                color: isMine ? _accentRed : null,
+                gradient: isMine
+                    ? null
+                    : LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [Color(0xFF263244), Color(0xFF0F1724)],
+                      ),
                 borderRadius: BorderRadius.circular(18),
-                border: isEmergency 
-                  ? Border.all(color: _accentRed, width: 2)
-                  : null,
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  if (isEmergency)
-                    Row(
-                      children: [
-                        Icon(Icons.warning, color: _accentRed, size: 16),
-                        const SizedBox(width: 4),
-                        Text(
-                          'EMERGENCY',
-                          style: TextStyle(
-                            color: _accentRed,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  if (isEmergency) const SizedBox(height: 6),
                   Text(
                     text,
                     style: const TextStyle(
@@ -121,7 +133,9 @@ class ChatPage extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
-        onPressed: () {},
+        onPressed: () {
+          _sendMessage(message);
+        },
         backgroundColor: Color(0xFF263244),
         side: BorderSide(color: Colors.white24),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -129,8 +143,39 @@ class ChatPage extends StatelessWidget {
     );
   }
 
+  Future<void> _sendMessage(String text) async {
+    if (text.trim().isEmpty) return;
+
+    try {
+      final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+      
+      // Add to local message list
+      messageProvider.addSentMessage(text);
+
+      // Send via P2P
+      if (widget.isHost) {
+        await widget.hostService?.sendMessage(text);
+      } else {
+        await widget.clientService?.sendMessage(text);
+      }
+
+      // Clear input
+      _messageController.clear();
+    } catch (e) {
+      debugPrint('Send message error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final messageProvider = Provider.of<MessageProvider>(context);
+    final contactName = messageProvider.currentDeviceName ?? 'Contact';
+
     return Scaffold(
       backgroundColor: _bgColor,
       appBar: AppBar(
@@ -145,14 +190,14 @@ class ChatPage extends StatelessWidget {
         ),
         title: Row(
           children: [
-            _buildAvatar(name: 'Emergency Responder Alpha'),
+            _buildAvatar(name: contactName),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Emergency Responder Alpha',
+                    contactName,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -184,45 +229,34 @@ class ChatPage extends StatelessWidget {
             ),
           ],
         ),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.campaign, color: _accentRed),
-            onPressed: () {},
-            tooltip: 'Escalate to broadcast',
-          ),
-        ],
       ),
       body: Column(
         children: [
+          // Messages list
           Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              children: [
-                _buildMessage(
-                  isMine: false,
-                  text: 'Are you safe? The bridge is flooded.',
-                  time: '15:07',
-                ),
-                _buildMessage(
-                  isMine: true,
-                  text: 'Yes, I\'m safe. Currently at the community center.',
-                  time: '15:08',
-                ),
-                _buildMessage(
-                  isMine: false,
-                  text: 'Good. We have medical supplies here if needed.',
-                  time: '15:10',
-                ),
-                _buildMessage(
-                  isMine: true,
-                  text: 'EMERGENCY: Need immediate assistance!',
-                  time: '15:12',
-                  isEmergency: true,
-                ),
-              ],
-            ),
+            child: messageProvider.messages.isEmpty
+                ? Center(
+                    child: Text(
+                      'No messages yet. Start the conversation!',
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  )
+                : ListView.builder(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    itemCount: messageProvider.messages.length,
+                    itemBuilder: (context, index) {
+                      final msg = messageProvider.messages[index];
+                      return _buildMessage(
+                        isMine: msg.isMine,
+                        senderName: msg.senderName,
+                        text: msg.text,
+                        time: messageProvider.getFormattedTime(msg.timestamp),
+                      );
+                    },
+                  ),
           ),
 
+          // Quick message chips
           Container(
             height: 60,
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -248,7 +282,7 @@ class ChatPage extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // Voice message button
+                // Voice message button (placeholder)
                 Container(
                   width: 48,
                   height: 48,
@@ -260,11 +294,17 @@ class ChatPage extends StatelessWidget {
                   ),
                   child: IconButton(
                     icon: const Icon(Icons.mic, color: Colors.white),
-                    onPressed: () {},
+                    onPressed: () {
+                      // Voice feature not implemented yet
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Voice messages coming soon')),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(width: 12),
 
+                // Text input
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -274,17 +314,20 @@ class ChatPage extends StatelessWidget {
                       border: Border.all(color: Colors.white24),
                     ),
                     child: TextField(
+                      controller: _messageController,
                       style: const TextStyle(color: Colors.white),
                       decoration: const InputDecoration(
-                        hintText: 'Type emergency message...',
+                        hintText: 'Type message...',
                         hintStyle: TextStyle(color: Colors.white54),
                         border: InputBorder.none,
                       ),
+                      onSubmitted: (text) => _sendMessage(text),
                     ),
                   ),
                 ),
                 const SizedBox(width: 12),
 
+                // Send button
                 Container(
                   width: 48,
                   height: 48,
@@ -296,7 +339,7 @@ class ChatPage extends StatelessWidget {
                   ),
                   child: IconButton(
                     icon: const Icon(Icons.send, color: Colors.white),
-                    onPressed: () {},
+                    onPressed: () => _sendMessage(_messageController.text),
                   ),
                 ),
               ],

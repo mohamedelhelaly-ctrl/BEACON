@@ -8,6 +8,9 @@ class BeaconProvider extends ChangeNotifier {
   Map<String, dynamic>? activeEvent;        // current hosting event
   List<Map<String, dynamic>> connected = []; // currently connected devices
   List<Map<String, dynamic>> logs = [];      // logs for active event
+  
+  // Messaging state
+  String? _hostDeviceName;  // Name of the host (for client to display)
 
   // ============================================================
   //                   DEVICE INITIALIZATION
@@ -145,4 +148,17 @@ class BeaconProvider extends ChangeNotifier {
   // Make it accessible for testing
   Future<void> writeLog(String msg, {int? eventId}) => 
       _writeLog(msg, eventId: eventId);
+
+  // ============================================================
+  //                   MESSAGING
+  // ============================================================
+
+  /// Getter for host device name (used by clients to display who they're talking to)
+  String? get hostDeviceName => _hostDeviceName;
+
+  /// Set the host device name when connecting as a client
+  void setHostDeviceName(String name) {
+    _hostDeviceName = name;
+    notifyListeners();
+  }
 }

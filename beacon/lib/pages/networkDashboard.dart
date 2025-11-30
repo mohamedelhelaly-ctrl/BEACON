@@ -5,9 +5,11 @@ import 'package:device_info_plus/device_info_plus.dart';
 import 'dart:io';
 import 'chatPage.dart';
 import 'debugDatabasePage.dart';
+import 'profilePage.dart';
 import '../services/p2p_service.dart';
 import '../services/permissions_service.dart';
 import '../providers/beacon_provider.dart';
+import '../providers/message_provider.dart';
 
 class NetworkDashboardUI extends StatefulWidget {
   final bool isHost;
@@ -35,7 +37,6 @@ class _NetworkDashboardUIState extends State<NetworkDashboardUI> {
   bool _isScanning = false;
   bool _isClientConnected = false;
   String? _connectedDeviceName;
-  String? _connectedEventId;
   List<BleDiscoveredDevice> _discoveredDevices = [];
 
   // Device info for database
@@ -109,14 +110,6 @@ class _NetworkDashboardUIState extends State<NetworkDashboardUI> {
         AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
         _deviceUUID = androidInfo.id;
         _deviceName = androidInfo.model;
-      } else if (Platform.isIOS) {
-        IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
-        _deviceUUID = iosInfo.identifierForVendor ?? 'unknown_ios';
-        _deviceName = iosInfo.model;
-      } else {
-        // Fallback for other platforms
-        _deviceUUID = 'unknown_${DateTime.now().millisecondsSinceEpoch}';
-        _deviceName = 'Unknown Device';
       }
     } catch (e) {
       debugPrint('Error getting device info: $e');
@@ -144,6 +137,10 @@ class _NetworkDashboardUIState extends State<NetworkDashboardUI> {
         state.preSharedKey ?? 'Unknown',
         state.hostIpAddress ?? 'Unknown',
       );
+
+      // Initialize MessageProvider with current device info
+      final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+      messageProvider.initialize(_deviceUUID!, _deviceName!);
 
 // Listen for connected clients
 _clientListStream = _hostService!.clientStream();
@@ -173,12 +170,25 @@ _clientListStream!.listen((clients) async {
 });
 
 
-      // Listen for incoming messages
+      // Listen for incoming messages from clients
       _hostMessageStream = _hostService!.messageStream();
       _hostMessageStream!.listen((msg) {
         debugPrint('Host received message: $msg');
+        
+        // Host only receives text messages (clients send via broadcastText)
+        // Try to find which client sent it from the connected clients list
+        String senderName = 'Unknown Client';
+        String senderId = 'unknown';
+        
+        if (_connectedClients.isNotEmpty) {
+          final client = _connectedClients.first;
+          senderName = client.username;
+          senderId = client.id;
+        }
+        
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Msg: $msg')));
+          final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+          messageProvider.addReceivedMessage(senderName, senderId, msg);
         }
       });
     } catch (e) {
@@ -190,11 +200,26 @@ _clientListStream!.listen((clients) async {
       }
     }
   }
-
+/////////////////////////////////////////////////////////////////////
+///
+///
+///
+///
+///  client 
+///
+///
+///
+///\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\
+///
+///
   Future<void> _initClient() async {
     try {
       _clientService = P2PClientService();
       await _clientService!.initialize();
+
+      // Initialize MessageProvider with current device info
+      final messageProvider = Provider.of<MessageProvider>(context, listen: false);
+      messageProvider.initialize(_deviceUUID!, _deviceName!);
 
       // Listen for messages from host once connected
       _clientMessageStream = _clientService!.messageStream();
@@ -206,9 +231,11 @@ _clientListStream!.listen((clients) async {
         if (syncData != null) {
           _handleEventSync(syncData);
         } else {
-          // Regular text message
+          // Regular text message from host
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Msg: $msg')));
+            String hostName = _beaconProvider.hostDeviceName ?? 'Host';
+            String hostId = 'host';
+            messageProvider.addReceivedMessage(hostName, hostId, msg);
           }
         }
       });
@@ -226,7 +253,7 @@ _clientListStream!.listen((clients) async {
     if (_clientService == null || _isScanning) return;
 
     setState(() => _isScanning = true);
-    _discoveredDevices.clear();
+    _discoveredDevices.clear(); //
 
     try {
       // startScan passes discovered devices to our callback
@@ -272,6 +299,9 @@ _clientListStream!.listen((clients) async {
         _isClientConnected = true;
         _connectedDeviceName = device.deviceName;
       });
+
+      // Store host device name for messaging
+      _beaconProvider.setHostDeviceName(device.deviceName);
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Connected to ${device.deviceName}')),
@@ -319,32 +349,6 @@ _clientListStream!.listen((clients) async {
       }
     } catch (e) {
       debugPrint('Error importing event sync: $e');
-    }
-  }
-
-  Future<void> _sendMessage(String text) async {
-    try {
-      if (widget.isHost) {
-        await _hostService?.sendMessage(text);
-      } else {
-        await _clientService?.sendMessage(text);
-      }
-    } catch (e) {
-      debugPrint('Send message error: $e');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Send failed: $e')));
-    }
-  }
-
-  Future<void> _keepConnectionAlive() async {
-    if (!widget.isHost && _connectedEventId != null) {
-      try {
-        final connections = await _beaconProvider.db.getActiveEventConnections(int.parse(_connectedEventId!));
-        if (connections.isNotEmpty) {
-          await _beaconProvider.updateLastSeen(connections.first['id']);
-        }
-      } catch (e) {
-        debugPrint('Keep alive error: $e');
-      }
     }
   }
 
@@ -503,6 +507,15 @@ _clientListStream!.listen((clients) async {
           IconButton(
             onPressed: () {
               Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const ProfilePage()),
+              );
+            },
+            icon: const Icon(Icons.person),
+            tooltip: 'Profile',
+          ),
+          IconButton(
+            onPressed: () {
+              Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const DebugDatabasePage()),
               );
             },
@@ -540,7 +553,15 @@ _clientListStream!.listen((clients) async {
           const SizedBox(height: 10),
           FloatingActionButton(
             onPressed: () {
-              Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ChatPage()));
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => ChatPage(
+                    isHost: widget.isHost,
+                    hostService: _hostService,
+                    clientService: _clientService,
+                  ),
+                ),
+              );
             },
             backgroundColor: _accentRed,
             child: const Icon(Icons.chat, color: Colors.white),
