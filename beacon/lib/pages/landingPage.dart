@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'networkDashboard.dart';
+import 'host_dashboard.dart';
+import 'client_dashboard.dart';
 import '../services/permissions_service.dart';
 
 class LandingPageUI extends StatelessWidget {
@@ -25,7 +26,6 @@ class LandingPageUI extends StatelessWidget {
             children: [
               _buildTopSection(context, isLarge),
               const SizedBox(height: 24),
-
               Expanded(
                 child: Center(
                   child: ConstrainedBox(
@@ -33,53 +33,47 @@ class LandingPageUI extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        //---------------------------------------------------------
-                        // JOIN EXISTING COMMUNICATION (CLIENT)
-                        //---------------------------------------------------------
                         _actionButton(
                           context,
-                          label: 'Join Existing Communication',
-                          icon: Icons.link,
-                          colorA: _accentRed,
-                          colorB: _accentOrange,
+                          label: 'START HOSTING',
+                          icon: Icons.router,
+                          colorA: const Color(0xFF263244),
+                          colorB: const Color(0xFF0F1724),
                           onPressed: () async {
                             final ok = await PermissionService.requestP2PPermissions();
                             if (!ok) {
                               _showPermissionError(context);
                               return;
                             }
-
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const NetworkDashboardUI(isHost: false),
-                              ),
-                            );
+                            if (context.mounted) {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const HostDashboardUI(),
+                                ),
+                              );
+                            }
                           },
                         ),
-
                         const SizedBox(height: 18),
-
-                        //---------------------------------------------------------
-                        // START NEW COMMUNICATION (HOST)
-                        //---------------------------------------------------------
                         _actionButton(
                           context,
-                          label: 'Start New Communication',
-                          icon: Icons.wifi_tethering,
-                          colorA: _accentOrange,
-                          colorB: _accentRed,
+                          label: 'JOIN COMMUNICATION',
+                          icon: Icons.group_add,
+                          colorA: const Color(0xFF263244),
+                          colorB: const Color(0xFF0F1724),
                           onPressed: () async {
                             final ok = await PermissionService.requestP2PPermissions();
                             if (!ok) {
                               _showPermissionError(context);
                               return;
                             }
-
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const NetworkDashboardUI(isHost: true),
-                              ),
-                            );
+                            if (context.mounted) {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const ClientDashboardUI(),
+                                ),
+                              );
+                            }
                           },
                         ),
                       ],
@@ -87,16 +81,13 @@ class LandingPageUI extends StatelessWidget {
                   ),
                 ),
               ),
-
               Padding(
                 padding: const EdgeInsets.only(bottom: 6),
                 child: Text(
                   'Powered by Peer-to-Peer Technology',
                   textAlign: TextAlign.center,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(color: Colors.white70, fontSize: 12),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Colors.white70, fontSize: 12),
                 ),
               ),
             ],
@@ -106,9 +97,6 @@ class LandingPageUI extends StatelessWidget {
     );
   }
 
-  //----------------------------------------------
-  // ERROR SNACKBAR
-  //----------------------------------------------
   void _showPermissionError(BuildContext context) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -117,9 +105,6 @@ class LandingPageUI extends StatelessWidget {
     );
   }
 
-  //----------------------------------------------
-  // TOP LOGO
-  //----------------------------------------------
   Widget _buildTopSection(BuildContext context, bool isLarge) {
     return Column(
       children: [
@@ -171,9 +156,6 @@ class LandingPageUI extends StatelessWidget {
     );
   }
 
-  //----------------------------------------------
-  // BUTTON BUILDER
-  //----------------------------------------------
   Widget _actionButton(
     BuildContext context, {
     required String label,

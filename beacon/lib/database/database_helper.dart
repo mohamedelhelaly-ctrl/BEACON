@@ -259,6 +259,148 @@ class DatabaseHelper {
   }
 
   // =====================================================
+  //                CLEAR & SYNC UTILITIES
+  // =====================================================
+
+  /// Clear all data from all tables (for client sync)
+  Future<void> clearAllData() async {
+    final db = await database;
+
+    try {
+      await db.transaction((txn) async {
+        // Clear in order to respect foreign keys
+        await txn.delete('logs');
+        await txn.delete('event_connections');
+        await txn.delete('events');
+        await txn.delete('devices');
+        debugPrint('All database data cleared');
+      });
+    } catch (e) {
+      debugPrint('Error clearing database: $e');
+      rethrow;
+    }
+  }
+
+  /// Clear all data and repopulate with sync data from host
+  /// This ensures client has exact same data as host
+  Future<void> clearAndRepopulateFromSync(Map<String, dynamic> syncData) async {
+    final db = await database;
+
+    try {
+      await db.transaction((txn) async {
+        // Clear all tables first
+        await txn.delete('logs');
+        await txn.delete('event_connections');
+        await txn.delete('events');
+        await txn.delete('devices');
+        debugPrint('Database cleared, preparing to import host data');
+
+        // Now import fresh data from host
+        // Import event
+        if (syncData['event'] != null) {
+          final event = syncData['event'] as Map<String, dynamic>;
+          try {
+            await txn.insert(
+              "events",
+              {
+                'id': event['id'],
+                'host_id': event['host_id'],
+                'ssid': event['ssid'],
+                'password': event['password'],
+                'host_ip': event['host_ip'],
+                'started_at': event['started_at'],
+                'ended_at': event['ended_at'],
+              },
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          } catch (e) {
+            debugPrint('Error importing event: $e');
+            rethrow;
+          }
+        }
+
+        // Import devices
+        if (syncData['devices'] != null) {
+          final devices = syncData['devices'] as List<dynamic>;
+          debugPrint('Importing ${devices.length} devices from host...');
+          for (final device in devices) {
+            final deviceMap = device as Map<String, dynamic>;
+            try {
+              await txn.insert(
+                "devices",
+                {
+                  'id': deviceMap['id'],
+                  'device_uuid': deviceMap['device_uuid'],
+                  'name': deviceMap['name'],
+                  'is_host': deviceMap['is_host'],
+                  'created_at': deviceMap['created_at'],
+                },
+                conflictAlgorithm: ConflictAlgorithm.replace,
+              );
+            } catch (e) {
+              debugPrint('Error importing device ${deviceMap['id']}: $e');
+            }
+          }
+        }
+
+        // Import event connections
+        if (syncData['connections'] != null) {
+          final connections = syncData['connections'] as List<dynamic>;
+          debugPrint('Importing ${connections.length} connections from host...');
+          for (final conn in connections) {
+            final connMap = conn as Map<String, dynamic>;
+            try {
+              await txn.insert(
+                "event_connections",
+                {
+                  'id': connMap['id'],
+                  'event_id': connMap['event_id'],
+                  'device_id': connMap['device_id'],
+                  'joined_at': connMap['joined_at'],
+                  'last_seen': connMap['last_seen'],
+                  'is_current': connMap['is_current'],
+                },
+                conflictAlgorithm: ConflictAlgorithm.replace,
+              );
+            } catch (e) {
+              debugPrint('Error importing connection ${connMap['id']}: $e');
+            }
+          }
+        }
+
+        // Import logs
+        if (syncData['logs'] != null) {
+          final logs = syncData['logs'] as List<dynamic>;
+          debugPrint('Importing ${logs.length} logs from host...');
+          for (final log in logs) {
+            final logMap = log as Map<String, dynamic>;
+            try {
+              await txn.insert(
+                "logs",
+                {
+                  'id': logMap['id'],
+                  'event_id': logMap['event_id'],
+                  'device_id': logMap['device_id'],
+                  'message': logMap['message'],
+                  'timestamp': logMap['timestamp'],
+                },
+                conflictAlgorithm: ConflictAlgorithm.replace,
+              );
+            } catch (e) {
+              debugPrint('Error importing log ${logMap['id']}: $e');
+            }
+          }
+        }
+
+        debugPrint('Database sync complete - now matches host');
+      });
+    } catch (e) {
+      debugPrint('Transaction failed during sync: $e');
+      rethrow;
+    }
+  }
+
+  // =====================================================
   //                  SYNC IMPORT
   // =====================================================
 
